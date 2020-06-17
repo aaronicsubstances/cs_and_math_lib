@@ -1,5 +1,7 @@
 # My Library of Computer Science and Discrete Mathematics Algorithm and Data Structures
 
+This library is a selected implementation of computer science and discrete mathematics algorithms and data structures, with focus on those relevant to implementing recursive-descent parsers.
+
 INCLUDES
 
   1. Generating Permutations and Combinations
