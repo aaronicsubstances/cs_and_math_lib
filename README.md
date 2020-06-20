@@ -1,8 +1,8 @@
 # My Library of Computer Science and Discrete Mathematics Algorithm and Data Structures
 
-This library is a selected implementation of computer science and discrete mathematics algorithms and data structures, with focus on those relevant to implementing recursive-descent parsers.
+This Java library is a selected implementation of computer science and discrete mathematics algorithms and data structures, with focus on those relevant to implementing recursive-descent parsers.
 
-INCLUDES
+## Includes
 
   1. Generating Permutations and Combinations
   1. Generating Cartesian Products
@@ -17,3 +17,18 @@ INCLUDES
   1. Simulating NFA (ie directly without converting to DFA)
   1. Base classes for implementing Pratt Parser
   1. Implementing Source Maps (ie recording changes made to an original file to obtain changed file, and later mapping positions in changed file back to positions in original file)
+
+## Build Instructions
+
+   * Ensure JDK 8 is installed locally, and that JAVA_HOME environment variable is set up properly.
+   * Also ensure JAVA_HOME/bin folder with **java** and **javac** executables is placed on the system path.
+   * Clone repository and run `gradlew build` from root of project. Can also run `gradlew clean build` instead (Gradle 5.6.4 will be downloaded and used by the commands). This test and builds the project.
+
+## Tests Requiring Manual Inspection
+
+The following tests generate standard output/error messages which can be verified for correctness:
+
+   * cs_and_math.MathAlgorithmsTest.testShuffleList
+   * cs_and_math.parsing.LexerSupportTest.{testParseDecimalStringForError,testParseHexadecimalStringForError}
+
+
