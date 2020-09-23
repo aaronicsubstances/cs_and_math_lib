@@ -17,6 +17,7 @@ This Java library is a selected implementation of computer science and discrete 
   1. Simulating NFA (ie directly without converting to DFA)
   1. Base classes for implementing Pratt Parser
   1. Implementing Source Maps (ie recording changes made to an original file to obtain changed file, and later mapping positions in changed file back to positions in original file)
+  1. Implementation of Unix diff normal format
 
 ## Build Instructions
 
