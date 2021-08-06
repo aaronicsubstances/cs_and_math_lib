@@ -4,7 +4,8 @@ public interface ExternalStorage {
     String createBucket();
     void deleteBucket(String bucketId);
     Object openStream(String bucketId,
-        boolean openForWriting, boolean truncateBeforeWriting);
+        boolean openForWriting, boolean truncateBeforeWriting,
+        int bufferSize);
     void closeStream(Object stream);
     byte[] deserializeFrom(Object stream);
     void serializeTo(Object stream, Object item);

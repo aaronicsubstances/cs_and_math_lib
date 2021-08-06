@@ -12,11 +12,11 @@ import java.util.List;
 public class ExternalSort {
 
     public static <T> Iterator<T> sort(Iterator<T> data, Comparator<T> sortFunc,
-            SortConfiguration sortConfiguration, ExternalStorage storage) {
+            SortConfiguration sortConfig, ExternalStorage storage) {
                 
         // phase 1: split iterator into chunks and sort each chunk
         CreateSortedChunksRetResult<T> splitResult = createSortedChunks(data, sortFunc,
-            sortConfiguration, storage);
+            sortConfig, storage);
         if (splitResult.finalSortResult != null) {
             return splitResult.finalSortResult;
         }
@@ -24,7 +24,7 @@ public class ExternalSort {
         // phase 2: perform multiple passes of multiway merge algorithm
         List<String> sortedChunkIds = splitResult.sortedChunkIds;
         while (sortedChunkIds.size() > 1) {
-            int chunkGroupSize = sortConfiguration.calculateChunkGroupSize(
+            int chunkGroupSize = sortConfig.calculateChunkGroupSize(
                 sortedChunkIds.size());
             List<String> outputChunkIds = new ArrayList<>();
             for (int i = 0; i < sortedChunkIds.size(); i += chunkGroupSize) {
@@ -32,7 +32,7 @@ public class ExternalSort {
                 int endIdx = Math.min(i + chunkGroupSize, sortedChunkIds.size());
                 List<String> subsetOfSortedChunkIds = sortedChunkIds.subList(startIdx, endIdx);
                 String outputChunkId = performMultiWayMerge(subsetOfSortedChunkIds,
-                    sortFunc, sortConfiguration, storage);
+                    sortFunc, sortConfig, storage);
                 outputChunkIds.add(outputChunkId);
             }
             sortedChunkIds = outputChunkIds;
@@ -43,7 +43,8 @@ public class ExternalSort {
             return Collections.emptyIterator();
         }
 
-        return new ExternalSortResult<T>(sortedChunkIds.get(0), storage);
+        return new ExternalSortResult<T>(sortedChunkIds.get(0), storage,
+            sortConfig.getMaximumRamUsage());
     }
 
     /**
@@ -54,8 +55,10 @@ public class ExternalSort {
      *    (there are 900MB / 100MB = 9 chunks), which now need to be merged into one single output file.
      */
     static <T> CreateSortedChunksRetResult<T> createSortedChunks(Iterator<T> data, 
-            Comparator<T> sortFunc, SortConfiguration sortConfiguration,
-            ExternalStorage storage) {        
+            Comparator<T> sortFunc, SortConfiguration sortConfig,
+            ExternalStorage storage) {
+        final int bufferSize = sortConfig.getMaximumRamUsage();  
+        
         List<String> sortedChunkIds = new ArrayList<>();
         List<T> sortedList = new ArrayList<>();
         int currentChunkSize = 0;
@@ -65,12 +68,12 @@ public class ExternalSort {
             int serializedSize = storage.estimateSerializedSize(item);
             // At least one chunk must be saved, 
             // regardless of maximum RAM usage setting.
-            if (currentChunkSize >= sortConfiguration.getMaximumRamUsage()) {
+            if (currentChunkSize >= bufferSize) {
                 sortedList.sort((a, b)->{
                     return sortFunc.compare(a, b);
                 });
-                String chunkId = storage.createBucket();
-                saveSortedChunks(chunkId, sortedList, storage);
+                String chunkId = saveSortedChunk(sortedList.iterator(),
+                    bufferSize, storage);
                 sortedChunkIds.add(chunkId);
 
                 sortedList.clear();
@@ -85,49 +88,74 @@ public class ExternalSort {
             return sortFunc.compare(a, b);
         });
 
-        // perform optimization of avoiding external storage
-        // completely, if we have not touched it up until
-        // this stage.
-        if (sortedChunkIds.isEmpty()) {
-            Iterator<T> finalSortResult = sortedList.iterator(); 
-            return new CreateSortedChunksRetResult<T>(null, finalSortResult);
-        }
+        try {
+            // perform optimization of avoiding external storage
+            // completely, if we have not touched it up until
+            // this stage.
+            if (sortedChunkIds.isEmpty()) {
+                Iterator<T> finalSortResult = sortedList.iterator(); 
+                return new CreateSortedChunksRetResult<T>(null, finalSortResult);
+            }
 
-        // save remaining items.
-        String chunkId = storage.createBucket();
-        saveSortedChunks(chunkId, sortedList, storage);
-        sortedChunkIds.add(chunkId);
-        return new CreateSortedChunksRetResult<T>(sortedChunkIds, null);
+            // save remaining items.
+            String chunkId = saveSortedChunk(sortedList.iterator(),
+                bufferSize, storage);
+            sortedChunkIds.add(chunkId);
+            return new CreateSortedChunksRetResult<T>(sortedChunkIds, null);
+        }
+        finally {
+            if (data instanceof AutoCloseable) {
+                try {
+                    ((AutoCloseable) data).close();
+                }
+                catch (Throwable ignore) {}
+            }
+        }
     }
 
     static <T> String performMultiWayMerge(List<String> sortedChunkIds, Comparator<T> sortFunc,
-            SortConfiguration sortConfiguration, ExternalStorage storage) {
-        String outputChunkId = storage.createBucket();
-        Object outputStream = null;
+            SortConfiguration sortConfig, ExternalStorage storage) {                
+        // calculate buffer sizes for input buffers and output buffer.
+        final int bufferSize = sortConfig.getMaximumRamUsage() /
+            (sortedChunkIds.size() + 1);
+
+        List<AutoCloseable> disposables = new ArrayList<>();
+
         try {
-            outputStream = storage.openStream(outputChunkId, true, true);
             List<Iterator<T>> sortedChunkIterators = new ArrayList<>();
             for (String sortedChunkId : sortedChunkIds) {
-                Iterator<T> iterator = new ExternalSortResult<>(sortedChunkId, storage);
+                ExternalSortResult<T> iterator = new ExternalSortResult<>(sortedChunkId, storage,
+                    bufferSize);
                 sortedChunkIterators.add(iterator);
+                disposables.add(iterator);
             }
+            Iterator<T> sortedItems = MultiWayMerge.merge(sortedChunkIterators, sortFunc);
+            String outputChunkId = saveSortedChunk(sortedItems, bufferSize, storage);
+            return outputChunkId;
         }
         finally {
-            if (outputStream != null) {
-                storage.closeStream(outputChunkId);
+            for (AutoCloseable disposable: disposables) {
+                try {
+                    disposable.close();
+                }
+                catch (Throwable ignore) {
+                }
             }
         }
-        return outputChunkId;
     }
 
-    private static <T> void saveSortedChunks(String bucketId,
-            List<T> sortedList, ExternalStorage storage) {
+    static <T> String saveSortedChunk(Iterator<T> sortedItems, int bufferSize,
+            ExternalStorage storage) {
+        String bucketId = storage.createBucket();
         Object chunkStream = null;
         try {
-            chunkStream = storage.openStream(bucketId, true, true);
-            for (T item: sortedList) {
+            chunkStream = storage.openStream(bucketId, true, true,
+                bufferSize);
+            while (sortedItems.hasNext()) {
+                T item = sortedItems.next();
                 storage.serializeTo(chunkStream, item);
             }
+            return bucketId;
         }
         finally {
             if (chunkStream != null) {
@@ -136,11 +164,12 @@ public class ExternalSort {
         }
     }
 
-    static class CreateSortedChunksRetResult<T> {
+    private static class CreateSortedChunksRetResult<T> {
         public List<String> sortedChunkIds;
         public Iterator<T> finalSortResult;
 
-        public CreateSortedChunksRetResult(List<String> sortedChunkIds, Iterator<T> finalSortResult) {
+        public CreateSortedChunksRetResult(List<String> sortedChunkIds,
+                Iterator<T> finalSortResult) {
             this.sortedChunkIds = sortedChunkIds;
             this.finalSortResult = finalSortResult;
         }
