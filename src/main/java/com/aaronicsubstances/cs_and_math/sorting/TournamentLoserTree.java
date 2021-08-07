@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.stream.Collectors;
 
@@ -11,49 +12,41 @@ import java.util.stream.Collectors;
  * Based on https://en.wikipedia.org/wiki/K-way_merge_algorithm#Tournament_Tree
  */
 public class TournamentLoserTree<T> {
-
-    public static class SortedItem<T> {
-        public T value;
-        public int indexOfSortedList;
-
-        public SortedItem(T value, int indexOfSortedList) {
-            this.value = value;
-            this.indexOfSortedList = indexOfSortedList;
-        }
-    }
-
+    private final Comparator<T> sortFunc;
     private Node<T> winnerLeaf;
-    private final Node<T> infinityMarkerNode = Node.createLeaf(null, -1);
+    private final Node<T> infinityMarkerNode = Node.createLeaf(null, true);
 
-    public TournamentLoserTree() {
+    public TournamentLoserTree(Comparator<T> sortFunc) {
+        this.sortFunc = Objects.requireNonNull(sortFunc, "sortFunc");
+        winnerLeaf = infinityMarkerNode;
     }
 
     public boolean winnerExists() {
-        return winnerLeaf != null && winnerLeaf.index >= 0;
+        return !winnerLeaf.isInfinity;
     }
 
-    public SortedItem<T> getCurrentWinner() {
-        return new SortedItem<>(winnerLeaf.value, winnerLeaf.index);
+    public T getCurrentWinner() {
+        return winnerLeaf.value;
     }
 
-    public void start(List<SortedItem<T>> headElements, Comparator<T> sortFunc) {
-        Queue<Node<T>> headNodes = new LinkedList<>();
-        for (SortedItem<T> item : headElements) {
-            headNodes.add(Node.createLeaf(item.value, item.indexOfSortedList));
+    public void restart(List<T> initialElements) {
+        Queue<Node<T>> leafNodes = new LinkedList<>();
+        for (T item : initialElements) {
+            leafNodes.add(Node.createLeaf(item, false));
         }
-        buildTree(headNodes, sortFunc);
+        buildTree(leafNodes);
     }
 
-    public void continueWith(SortedItem<T> newElement, Comparator<T> sortFunc) {
-        // Run replacement selection algorithm
-        Node<T> tempNodeLeaf = null;
-        if (newElement != null) {
-            tempNodeLeaf = Node.createLeaf(newElement.value, newElement.indexOfSortedList);
-        }
-        replayGames(winnerLeaf, tempNodeLeaf, sortFunc);
+    public void continueWithoutReplacement() {
+        replayGames(winnerLeaf, null);
     }
 
-    private void buildTree(Queue<Node<T>> initialLayer, Comparator<T> sortFunc) {
+    public void continueWithReplacement(T newElement) {
+        Node<T> tempNodeLeaf = Node.createLeaf(newElement, false);
+        replayGames(winnerLeaf, tempNodeLeaf);
+    }
+
+    private void buildTree(Queue<Node<T>> initialLayer) {
         Queue<Node<T>> currentLayer;
         Queue<Node<T>> nextLayer = initialLayer;
         do {
@@ -62,7 +55,7 @@ public class TournamentLoserTree<T> {
             while (!currentLayer.isEmpty()) {
                 Node<T> firstElement = currentLayer.remove();
                 Node<T> secondElement = currentLayer.poll();
-                GamePlayResult<T> result = playGame(firstElement, secondElement, sortFunc, true);
+                GamePlayResult<T> result = playGame(firstElement, secondElement, true);
                 Node<T> parent = Node.createParent(firstElement, secondElement,
                     result.winner, result.loser);
                 nextLayer.add(parent);
@@ -76,20 +69,20 @@ public class TournamentLoserTree<T> {
             winnerLeaf = root.winner;
         }
         else {
-            winnerLeaf = null;
+            winnerLeaf = infinityMarkerNode;
         }
     }
 
-    private void replayGames(Node<T> referenceNode, Node<T> contenderNode,
-            Comparator<T> sortFunc) {
+    private void replayGames(Node<T> referenceNode, Node<T> contenderNode) {
+        // Run replacement selection algorithm
         while (referenceNode != null) {
-            GamePlayResult<T> result = playGame(referenceNode, contenderNode, sortFunc,
+            GamePlayResult<T> result = playGame(referenceNode, contenderNode,
                 false);
             winnerLeaf = result.winner;
             Node<T> loserLeaf = result.loser;
             if (referenceNode.isLeaf()) {
                 referenceNode.value = loserLeaf.value;
-                referenceNode.index = loserLeaf.index;
+                referenceNode.isInfinity = loserLeaf.isInfinity;
             }
             else {
                 referenceNode.loser = loserLeaf;
@@ -103,7 +96,7 @@ public class TournamentLoserTree<T> {
      * Compare nodes and determine the minimum (the "winner"). If there is a tie,
      * the first/leftmost node wins. 
     */
-    private GamePlayResult<T> playGame(Node<T> a, Node<T> b, Comparator<T> sortFunc,
+    private GamePlayResult<T> playGame(Node<T> a, Node<T> b,
             boolean isGameBetweenWinners) {        
         Node<T> winner = a;
         if (a != null && !a.isLeaf()) {
@@ -121,13 +114,13 @@ public class TournamentLoserTree<T> {
             loser = infinityMarkerNode;
         }
         int result;
-        if (winner.index < 0 || loser.index < 0) {
-            if (winner.index < 0 && loser.index < 0) {
+        if (winner.isInfinity || loser.isInfinity) {
+            if (winner.isInfinity && loser.isInfinity) {
                 // two infinity magnitudes found.
                 // don't really care about who wins. 
                 result = 0;
             }
-            else if (winner.index < 0) {
+            else if (winner.isInfinity) {
                 // infinity always loses to normal values.
                 result = 1;
             }
@@ -138,17 +131,6 @@ public class TournamentLoserTree<T> {
         }
         else {
             result = sortFunc.compare(winner.value, loser.value);
-            if (result == 0) {
-                // ensure stable sort with assumption that,
-                // when input sorted lists are concatenated, the result is the original
-                // unsorted list.
-                if (winner.index > loser.index) {
-                    result = 1;
-                }
-                else if (winner.index < loser.index) {
-                    result = -1;
-                }
-            }
         }
         if (result > 0) {
             // swap
@@ -163,8 +145,8 @@ public class TournamentLoserTree<T> {
         public Node<T> parent, loser;
 
         // used only by leaf nodes
-        public int index;
         public T value;
+        public boolean isInfinity;
 
         // used only during building of tree
         public Node<T> winner;
@@ -172,10 +154,10 @@ public class TournamentLoserTree<T> {
         /**
          * Used to create leaf nodes of loser tree.
         */
-        public static <T> Node<T> createLeaf(T value, int index) {
+        public static <T> Node<T> createLeaf(T value, boolean isInfinity) {
             Node<T> leaf = new Node<>();
             leaf.value = value;
-            leaf.index = index;
+            leaf.isInfinity = isInfinity;
 
             return leaf;
         }
