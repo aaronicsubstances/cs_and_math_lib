@@ -11,14 +11,14 @@ import java.util.List;
  */
 public class ExternalSort {
 
-    public static <T> Iterator<T> sort(Iterator<T> data, Comparator<T> sortFunc,
+    public static <T> CloseableIterator<T> sort(Iterator<T> data, Comparator<T> sortFunc,
             SortConfiguration sortConfig, ExternalStorage storage) {
                 
         // phase 1: split iterator into chunks and sort each chunk
         CreateSortedChunksRetResult<T> splitResult = createSortedChunks(data, sortFunc,
             sortConfig, storage);
         if (splitResult.finalSortResult != null) {
-            return splitResult.finalSortResult;
+            return new CloseableIteratorAdapter<>(splitResult.finalSortResult);
         }
 
         // phase 2: perform multiple passes of multiway merge algorithm
@@ -40,7 +40,7 @@ public class ExternalSort {
 
         // phase 3: generate iterator from final sorted chunk.
         if (sortedChunkIds.isEmpty()) {
-            return Collections.emptyIterator();
+            return new CloseableIteratorAdapter<>(Collections.emptyIterator());
         }
 
         return new ExternalSortResult<T>(sortedChunkIds.get(0), storage,
@@ -54,7 +54,7 @@ public class ExternalSort {
      * 3. Repeat steps 1 and 2 until all of the data is in sorted 100 MB chunks 
      *    (there are 900MB / 100MB = 9 chunks), which now need to be merged into one single output file.
      */
-    static <T> CreateSortedChunksRetResult<T> createSortedChunks(Iterator<T> data, 
+    private static <T> CreateSortedChunksRetResult<T> createSortedChunks(Iterator<T> data, 
             Comparator<T> sortFunc, SortConfiguration sortConfig,
             ExternalStorage storage) {
         final int bufferSize = sortConfig.getMaximumRamUsage();  
@@ -88,32 +88,22 @@ public class ExternalSort {
             return sortFunc.compare(a, b);
         });
 
-        try {
-            // perform optimization of avoiding external storage
-            // completely, if we have not touched it up until
-            // this stage.
-            if (sortedChunkIds.isEmpty()) {
-                Iterator<T> finalSortResult = sortedList.iterator(); 
-                return new CreateSortedChunksRetResult<T>(null, finalSortResult);
-            }
+        // perform optimization of avoiding external storage
+        // completely, if we have not touched it up until
+        // this stage.
+        if (sortedChunkIds.isEmpty()) {
+            Iterator<T> finalSortResult = sortedList.iterator();
+            return new CreateSortedChunksRetResult<T>(null, finalSortResult);
+        }
 
-            // save remaining items.
-            String chunkId = saveSortedChunk(sortedList.iterator(),
-                bufferSize, storage);
-            sortedChunkIds.add(chunkId);
-            return new CreateSortedChunksRetResult<T>(sortedChunkIds, null);
-        }
-        finally {
-            if (data instanceof AutoCloseable) {
-                try {
-                    ((AutoCloseable) data).close();
-                }
-                catch (Throwable ignore) {}
-            }
-        }
+        // save remaining items.
+        String chunkId = saveSortedChunk(sortedList.iterator(),
+            bufferSize, storage);
+        sortedChunkIds.add(chunkId);
+        return new CreateSortedChunksRetResult<T>(sortedChunkIds, null);
     }
 
-    static <T> String performMultiWayMerge(List<String> sortedChunkIds, Comparator<T> sortFunc,
+    private static <T> String performMultiWayMerge(List<String> sortedChunkIds, Comparator<T> sortFunc,
             SortConfiguration sortConfig, ExternalStorage storage) {                
         // calculate buffer sizes for input buffers and output buffer.
         final int bufferSize = sortConfig.getMaximumRamUsage() /
@@ -144,7 +134,7 @@ public class ExternalSort {
         }
     }
 
-    static <T> String saveSortedChunk(Iterator<T> sortedItems, int bufferSize,
+    private static <T> String saveSortedChunk(Iterator<T> sortedItems, int bufferSize,
             ExternalStorage storage) {
         String bucketId = storage.createBucket();
         Object chunkStream = null;
