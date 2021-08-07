@@ -1,29 +1,28 @@
 package com.aaronicsubstances.cs_and_math.sorting;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
-import static com.aaronicsubstances.cs_and_math.sorting.TournamentLoserTree.Node;
+import static com.aaronicsubstances.cs_and_math.sorting.TournamentLoserTree.SortedItem;
 
 public class MultiWayMerge {
     
     public static <T> Iterator<T> merge(List<Iterator<T>> sortedInputLists, Comparator<T> sortFunc) {
         // phase 1: gather first elements of each list.
-        Queue<Node<T>> heads = new LinkedList<>();
-        for (int i = 0; i < sortedInputLists.size(); i++) {
-            Iterator<T> inputList = sortedInputLists.get(i);
+        List<SortedItem<T>> heads = new ArrayList<>();
+        int indexOfSortedList = 0;
+        for (Iterator<T> inputList : sortedInputLists) {
             if (inputList.hasNext()) {
                 T value = inputList.next();
-                Node<T> n = new Node<>(value, i);
-                heads.add(n);
+                heads.add(new SortedItem<>(value, indexOfSortedList));
             }
+            indexOfSortedList++;
         }
 
         // phase 2: build loser tree
         TournamentLoserTree<T> loserTreeDataStructure = new TournamentLoserTree<>();
-        loserTreeDataStructure.buildTree(heads, sortFunc);
+        loserTreeDataStructure.start(heads, sortFunc);
 
         // phase 3: output winner nodes and replay games with new nodes,
         // until infinite marker node replaces all nodes
@@ -46,23 +45,22 @@ public class MultiWayMerge {
 
         @Override
         public boolean hasNext() {
-            return loserTreeDataStructure.winnerLeaf != null &&
-                loserTreeDataStructure.winnerLeaf.index >= 0;
+            return loserTreeDataStructure.winnerExists();
         }
 
         @Override
         public T next() {
-            Node<T> winnerLeaf = loserTreeDataStructure.winnerLeaf;
-            T nextResult = winnerLeaf.value;
+            SortedItem<T> winner = loserTreeDataStructure.getCurrentWinner();
+            T nextResult = winner.value;
             
-            // Run replacement selection algorithm
-            Node<T> tempNodeLeaf = null;
-            Iterator<T> inputList = sortedInputLists.get(winnerLeaf.index);
+            // continue playing tournament with new item or with null.
+            SortedItem<T> newItem = null;
+            Iterator<T> inputList = sortedInputLists.get(winner.indexOfSortedList);
             if (inputList.hasNext()) {
                 T value = inputList.next();
-                tempNodeLeaf = new Node<>(value, winnerLeaf.index);
+                newItem = new SortedItem<>(value, winner.indexOfSortedList);
             }
-            loserTreeDataStructure.replayGames(winnerLeaf, tempNodeLeaf, sortFunc);
+            loserTreeDataStructure.continueWith(newItem, sortFunc);
             
             return nextResult;
         }

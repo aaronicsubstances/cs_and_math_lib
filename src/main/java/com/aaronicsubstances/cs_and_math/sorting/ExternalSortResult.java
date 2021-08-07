@@ -33,7 +33,7 @@ public class ExternalSortResult<T> implements CloseableIterator<T> {
     @Override
     public boolean hasNext() {
         if (stream == null) {
-            this.stream = storage.openStream(bucketId, false, false, bufferSize);
+            stream = storage.openStream(bucketId, false, false, bufferSize);
             advanceStream();
         }
         return currentItem != null;
