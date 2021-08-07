@@ -14,11 +14,10 @@ import java.util.stream.Collectors;
 public class TournamentLoserTree<T> {
     private final Comparator<T> sortFunc;
     private Node<T> winnerLeaf;
-    private final Node<T> infinityMarkerNode = Node.createLeaf(null, true);
 
     public TournamentLoserTree(Comparator<T> sortFunc) {
         this.sortFunc = Objects.requireNonNull(sortFunc, "sortFunc");
-        winnerLeaf = infinityMarkerNode;
+        winnerLeaf = makeInfinityNode();
     }
 
     public boolean winnerExists() {
@@ -38,12 +37,15 @@ public class TournamentLoserTree<T> {
     }
 
     public void continueWithoutReplacement() {
-        replayGames(winnerLeaf, null);
+        winnerLeaf.value = null;
+        winnerLeaf.isInfinity = true;
+        replayGames(winnerLeaf.parent, winnerLeaf);
     }
 
     public void continueWithReplacement(T newElement) {
-        Node<T> tempNodeLeaf = Node.createLeaf(newElement, false);
-        replayGames(winnerLeaf, tempNodeLeaf);
+        winnerLeaf.value = newElement;
+        winnerLeaf.isInfinity = false;
+        replayGames(winnerLeaf.parent, winnerLeaf);
     }
 
     private void buildTree(Queue<Node<T>> initialLayer) {
@@ -55,6 +57,9 @@ public class TournamentLoserTree<T> {
             while (!currentLayer.isEmpty()) {
                 Node<T> firstElement = currentLayer.remove();
                 Node<T> secondElement = currentLayer.poll();
+                if (secondElement == null) {
+                    secondElement = makeInfinityNode();
+                }
                 GamePlayResult<T> result = playGame(firstElement, secondElement, true);
                 Node<T> parent = Node.createParent(firstElement, secondElement,
                     result.winner, result.loser);
@@ -67,10 +72,15 @@ public class TournamentLoserTree<T> {
         Node<T> root = nextLayer.poll();
         if (root != null) {
             winnerLeaf = root.winner;
+            root.winner = null;
         }
         else {
-            winnerLeaf = infinityMarkerNode;
+            winnerLeaf = makeInfinityNode();
         }
+    }
+
+    private Node<T> makeInfinityNode() {
+        return Node.createLeaf(null, true);
     }
 
     private void replayGames(Node<T> referenceNode, Node<T> contenderNode) {
@@ -94,24 +104,17 @@ public class TournamentLoserTree<T> {
 
     /**
      * Compare nodes and determine the minimum (the "winner"). If there is a tie,
-     * the first/leftmost node wins. 
+     * the first/leftmost node wins.
     */
     private GamePlayResult<T> playGame(Node<T> a, Node<T> b,
-            boolean isGameBetweenWinners) {        
+            boolean isGameBetweenWinners) {
         Node<T> winner = a;
-        if (a != null && !a.isLeaf()) {
+        if (!a.isLeaf()) {
             winner = isGameBetweenWinners ? a.winner : a.loser;
         }
         Node<T> loser = b;
-        if (b != null && !b.isLeaf()) {
+        if (!b.isLeaf()) {
             loser = isGameBetweenWinners ? b.winner : b.loser;
-        }
-        // assign special node for infinite magnitude.
-        if (winner == null) {
-            winner = infinityMarkerNode;
-        }
-        if (loser == null) {
-            loser = infinityMarkerNode;
         }
         int result;
         if (winner.isInfinity || loser.isInfinity) {
@@ -169,18 +172,14 @@ public class TournamentLoserTree<T> {
                 Node<T> rightChild, Node<T> winner, Node<T> loser) {
             Node<T> parent = new Node<>();
             parent.winner = winner;
-            parent.loser = loser;            
+            parent.loser = loser;
 
             // set parent links and clear winner fields 
             // since they are no longer needed
-            if (leftChild != null) {
-                leftChild.parent = parent;
-                leftChild.winner = null;
-            }
-            if (rightChild != null) {
-                rightChild.parent = parent;
-                rightChild.winner = null;
-            }
+            leftChild.parent = parent;
+            leftChild.winner = null;
+            rightChild.parent = parent;
+            rightChild.winner = null;
 
             return parent;
         }

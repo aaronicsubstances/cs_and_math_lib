@@ -32,7 +32,7 @@ public class TournamentLoserTreeTest {
             instance.restart(input);
 
             // assert
-            if (randLength > 0) {
+            if (!input.isEmpty()) {
                 Integer expected = Collections.min(input);
                 assertTrue(instance.winnerExists());
                 Integer actual = instance.getCurrentWinner();
@@ -56,18 +56,25 @@ public class TournamentLoserTreeTest {
 
             // act
             instance.restart(input);
-            int replacement = randGen.nextInt();
-            instance.continueWithReplacement(replacement);
 
-            // assert
-            if (randLength > 0) {
-                input.remove(Collections.min(input));
+            for (int j = 0; j < randLength; j++) {                
+                // determine expected.
+                if (!input.isEmpty()) {
+                    int previousMin = Collections.min(input);
+                    assertTrue(input.remove((Object)previousMin));
+                }
+                int replacement = randGen.nextInt();
+                input.add(replacement);
+                Integer expected = Collections.min(input);
+
+                // act
+                instance.continueWithReplacement(replacement); 
+
+                // assert
+                assertTrue(instance.winnerExists());
+                Integer actual = instance.getCurrentWinner();
+                assertEquals(actual, expected);
             }
-            input.add(replacement);
-            Integer expected = Collections.min(input);
-            assertTrue(instance.winnerExists());
-            Integer actual = instance.getCurrentWinner();
-            assertEquals(actual, expected);
         }
     }
 
