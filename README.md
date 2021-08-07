@@ -19,6 +19,7 @@ This Java library is a selected implementation of computer science and discrete 
   1. Implementing Source Maps (ie recording changes made to an original file to obtain changed file, and later mapping positions in changed file back to positions in original file)
   1. Implementation of Unix diff normal format
   1. Implementation of multi-way merge algorithm (a.k.a. k-way merge).
+  1. Implementation of tournament loser tree for use with k-way algorithm. 
   1. Implementation of external sorting. 
 
 ## Build Instructions
