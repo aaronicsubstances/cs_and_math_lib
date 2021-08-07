@@ -23,8 +23,7 @@ public class TournamentLoserTree<T> {
     }
 
     private Node<T> winnerLeaf;
-    private Node<T> root;
-    private final Node<T> infinityMarkerNode = new Node<>(null, -1);
+    private final Node<T> infinityMarkerNode = Node.createLeaf(null, -1);
 
     public TournamentLoserTree() {
     }
@@ -40,7 +39,7 @@ public class TournamentLoserTree<T> {
     public void start(List<SortedItem<T>> headElements, Comparator<T> sortFunc) {
         Queue<Node<T>> headNodes = new LinkedList<>();
         for (SortedItem<T> item : headElements) {
-            headNodes.add(new Node<>(item.value, item.indexOfSortedList));
+            headNodes.add(Node.createLeaf(item.value, item.indexOfSortedList));
         }
         buildTree(headNodes, sortFunc);
     }
@@ -49,13 +48,12 @@ public class TournamentLoserTree<T> {
         // Run replacement selection algorithm
         Node<T> tempNodeLeaf = null;
         if (newElement != null) {
-            tempNodeLeaf = new Node<>(newElement.value, newElement.indexOfSortedList);
+            tempNodeLeaf = Node.createLeaf(newElement.value, newElement.indexOfSortedList);
         }
         replayGames(winnerLeaf, tempNodeLeaf, sortFunc);
     }
 
     private void buildTree(Queue<Node<T>> initialLayer, Comparator<T> sortFunc) {
-        winnerLeaf = infinityMarkerNode;
         Queue<Node<T>> currentLayer;
         Queue<Node<T>> nextLayer = initialLayer;
         do {
@@ -65,26 +63,20 @@ public class TournamentLoserTree<T> {
                 Node<T> firstElement = currentLayer.remove();
                 Node<T> secondElement = currentLayer.poll();
                 GamePlayResult<T> result = playGame(firstElement, secondElement, sortFunc, true);
-                Node<T> parent = new Node<>(result.winner, result.loser);
+                Node<T> parent = Node.createParent(firstElement, secondElement,
+                    result.winner, result.loser);
                 nextLayer.add(parent);
-
-                // set parent link and clear winner fields 
-                // since they are no longer needed
-                if (firstElement != null) {
-                    firstElement.parent = parent;
-                    firstElement.winner = null;
-                }
-                if (secondElement != null) {
-                    secondElement.parent = parent;
-                    secondElement.winner = null;
-                }
             }
         } while (nextLayer.size() > 1);
-        root = nextLayer.poll();
+        
+        // no need to save root, since replay games uses null parent to
+        // detect top of tree.
+        Node<T> root = nextLayer.poll();
         if (root != null) {
             winnerLeaf = root.winner;
-            // clear since no longer needed.
-            root.winner = null;
+        }
+        else {
+            winnerLeaf = null;
         }
     }
 
@@ -180,17 +172,35 @@ public class TournamentLoserTree<T> {
         /**
          * Used to create leaf nodes of loser tree.
         */
-        public Node(T value, int index) {
-            this.value = value;
-            this.index = index;
+        public static <T> Node<T> createLeaf(T value, int index) {
+            Node<T> leaf = new Node<>();
+            leaf.value = value;
+            leaf.index = index;
+
+            return leaf;
         }
 
         /**
          * Used to create internal nodes of loser tree.
          */
-        public Node(Node<T> winner, Node<T> loser) {
-            this.winner = winner;
-            this.loser = loser;
+        public static <T> Node<T> createParent(Node<T> leftChild,
+                Node<T> rightChild, Node<T> winner, Node<T> loser) {
+            Node<T> parent = new Node<>();
+            parent.winner = winner;
+            parent.loser = loser;            
+
+            // set parent links and clear winner fields 
+            // since they are no longer needed
+            if (leftChild != null) {
+                leftChild.parent = parent;
+                leftChild.winner = null;
+            }
+            if (rightChild != null) {
+                rightChild.parent = parent;
+                rightChild.winner = null;
+            }
+
+            return parent;
         }
 
         public boolean isLeaf() {
