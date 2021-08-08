@@ -57,7 +57,7 @@ public class TournamentLoserTreeTest {
             // act
             instance.restart(input);
 
-            for (int j = 0; j < randLength; j++) {                
+            for (int j = 0; j <= randLength; j++) {                
                 // determine expected.
                 if (!input.isEmpty()) {
                     int previousMin = Collections.min(input);

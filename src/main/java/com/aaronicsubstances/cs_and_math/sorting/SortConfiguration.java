@@ -4,10 +4,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SortConfiguration {
-    private int maximumRamUsage; // 100MB
-    private int minimumChunkRamUsage; // 4MB
+    private int maximumRamUsage;
+    private int minimumChunkRamUsage;
+    private Class<?> classOfItem;
 
     public SortConfiguration() {
+    }
+
+    public SortConfiguration(int maximumRamUsage, int minimumChunkRamUsage) {
+        this.maximumRamUsage = maximumRamUsage;
+        this.minimumChunkRamUsage = minimumChunkRamUsage;
     }
 
     public int getMaximumRamUsage() {
@@ -26,19 +32,20 @@ public class SortConfiguration {
         this.minimumChunkRamUsage = minimumChunkRamUsage;
     }
 
-    public int calculateChunkGroupSize(int sortedChunkCount) {
-        // Assuming maximumRamUsage = 100MB, minimumChunkRamUsage = 4MB,
-        // then maximumChunkGroupSize = 100/4 = 25
-        //
-        // e.g. 1: if totalDataSize = 900MB, then
-        // sortedChunkCount = 900/100 = 9
-        // chunkGroupSizes = [ 9 ]
-        //
-        // e.g. 2: if totalDataSize = 50_000 MB, then
-        // sortedChunkCount = 50_000/100 = 500
-        // chunkGroupSizes = [ 25, 20 ]
+    public Class<?> getClassOfItem() {
+        return classOfItem;
+    }
 
-        int maximumChunkGroupSize = maximumRamUsage / minimumChunkRamUsage;
-        return Math.min(sortedChunkCount, maximumChunkGroupSize);
+    public void setClassOfItem(Class<?> classOfItem) {
+        this.classOfItem = classOfItem;
+    }
+
+    public int getChunkGroupCount() {
+        int chunkGroupCount = 0;
+        if (minimumChunkRamUsage != 0) {
+            chunkGroupCount = maximumRamUsage / minimumChunkRamUsage;
+        }
+        // must be at least 2
+        return Math.max(2, chunkGroupCount);
     }
 }

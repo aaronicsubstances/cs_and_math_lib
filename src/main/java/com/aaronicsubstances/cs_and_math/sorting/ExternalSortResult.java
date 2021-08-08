@@ -4,15 +4,17 @@ import java.util.Iterator;
 
 public class ExternalSortResult<T> implements CloseableIterator<T> {
     private final String bucketId;
+    private final Class<?> classOfItem;
     private final ExternalStorage storage;
     private final int bufferSize;
 
     private Object stream;
     private T currentItem;
 
-    public ExternalSortResult(String bucketId, ExternalStorage storage,
-            int bufferSize) {
+    public ExternalSortResult(String bucketId, Class<?> classOfItem,
+            ExternalStorage storage, int bufferSize) {
         this.bucketId = bucketId;
+        this.classOfItem = classOfItem;
         this.storage = storage;
         this.bufferSize = bufferSize;
     }
@@ -27,7 +29,7 @@ public class ExternalSortResult<T> implements CloseableIterator<T> {
 
     @SuppressWarnings("unchecked")
     private void advanceStream() {
-        currentItem = (T)storage.deserializeFrom(stream);
+        currentItem = (T)storage.deserializeFrom(stream, classOfItem);
     }
 
     @Override

@@ -22,14 +22,13 @@ public class ExternalSort {
         }
 
         // phase 2: perform multiple passes of multiway merge algorithm
+        int chunkGroupCount = sortConfig.getChunkGroupCount();
         List<String> sortedChunkIds = splitResult.sortedChunkIds;
         while (sortedChunkIds.size() > 1) {
-            int chunkGroupSize = sortConfig.calculateChunkGroupSize(
-                sortedChunkIds.size());
             List<String> outputChunkIds = new ArrayList<>();
-            for (int i = 0; i < sortedChunkIds.size(); i += chunkGroupSize) {
+            for (int i = 0; i < sortedChunkIds.size(); i += chunkGroupCount) {
                 int startIdx = i;
-                int endIdx = Math.min(i + chunkGroupSize, sortedChunkIds.size());
+                int endIdx = Math.min(i + chunkGroupCount, sortedChunkIds.size());
                 List<String> subsetOfSortedChunkIds = sortedChunkIds.subList(startIdx, endIdx);
                 String outputChunkId = performMultiWayMerge(subsetOfSortedChunkIds,
                     sortFunc, sortConfig, storage);
@@ -43,11 +42,12 @@ public class ExternalSort {
             return new CloseableIteratorAdapter<>(Collections.emptyIterator());
         }
 
-        return new ExternalSortResult<T>(sortedChunkIds.get(0), storage,
-            sortConfig.getMaximumRamUsage());
+        return new ExternalSortResult<T>(sortedChunkIds.get(0), sortConfig.getClassOfItem(),
+            storage, sortConfig.getMaximumRamUsage());
     }
 
     /**
+     * (Example from Wikipedia)
      * 1. Read 100 MB of the data in main memory and sort by some conventional method, 
      *    like quicksort.
      * 2. Write the sorted data to disk.
@@ -114,7 +114,8 @@ public class ExternalSort {
         try {
             List<Iterator<T>> sortedChunkIterators = new ArrayList<>();
             for (String sortedChunkId : sortedChunkIds) {
-                ExternalSortResult<T> iterator = new ExternalSortResult<>(sortedChunkId, storage,
+                ExternalSortResult<T> iterator = new ExternalSortResult<>(
+                    sortedChunkId, sortConfig.getClassOfItem(), storage,
                     bufferSize);
                 sortedChunkIterators.add(iterator);
                 disposables.add(iterator);

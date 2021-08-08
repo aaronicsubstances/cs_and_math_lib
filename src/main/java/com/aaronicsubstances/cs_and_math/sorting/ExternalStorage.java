@@ -7,7 +7,7 @@ public interface ExternalStorage {
         boolean openForWriting, boolean truncateBeforeWriting,
         int bufferSize);
     void closeStream(Object stream);
-    byte[] deserializeFrom(Object stream);
+    Object deserializeFrom(Object stream, Class<?> classOfItem);
     void serializeTo(Object stream, Object item);
     int estimateSerializedSize(Object item);
 }
