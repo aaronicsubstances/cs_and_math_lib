@@ -39,13 +39,13 @@ public class TournamentLoserTree<T> {
     public void continueWithoutReplacement() {
         winnerLeaf.value = null;
         winnerLeaf.isInfinity = true;
-        replayGames(winnerLeaf.parent, winnerLeaf);
+        replayGames(winnerLeaf.parent);
     }
 
     public void continueWithReplacement(T newElement) {
         winnerLeaf.value = newElement;
         winnerLeaf.isInfinity = false;
-        replayGames(winnerLeaf.parent, winnerLeaf);
+        replayGames(winnerLeaf.parent);
     }
 
     private void buildTree(Queue<Node<T>> initialLayer) {
@@ -83,10 +83,10 @@ public class TournamentLoserTree<T> {
         return Node.createLeaf(null, true);
     }
 
-    private void replayGames(Node<T> referenceNode, Node<T> contenderNode) {
+    private void replayGames(Node<T> referenceNode) {
         // Run replacement selection algorithm
         while (referenceNode != null) {
-            GamePlayResult<T> result = playGame(referenceNode, contenderNode,
+            GamePlayResult<T> result = playGame(referenceNode, winnerLeaf,
                 false);
             winnerLeaf = result.winner;
             Node<T> loserLeaf = result.loser;
@@ -98,7 +98,6 @@ public class TournamentLoserTree<T> {
                 referenceNode.loser = loserLeaf;
             }
             referenceNode = referenceNode.parent;
-            contenderNode = winnerLeaf;
         }
     }
 
