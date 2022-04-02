@@ -1,0 +1,12 @@
+inner insertion sort loop
+merge sort (ie stable sort)
+binary search (array and generic list)
+fixed array size stack
+fixed array size queue
+test event loop api - with setinterval/clearinterval
+
+(doubly-linked) linked list which supports stack and queue simultaneoulsy = double-ended queue
+skip list (ie dictionary based on sorted doubly-linked list)
+*assume single threaded and optional use of event loop
+cache with ttl (ie like dictionary, but add throws exception if it exists already, so tryAdd/tryGet/tryRemove, has async methods, takes ttl, eviction notice handler, postponetimeout, 
+set one of 4 eviction policies: LFU, MRU, LRU, FIFO, only 1 way to indicate eviction: max count)
