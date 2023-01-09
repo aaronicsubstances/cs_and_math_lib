@@ -11,9 +11,9 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.testng.Assert.*;
 
-public class TimeSimulatorTest {
+public class VirtualEventLoopTest {
 
-    private void advanceLoop(TimeSimulator instance, boolean callAdvanceBy, int delay) {
+    private void advanceLoop(VirtualEventLoop instance, boolean callAdvanceBy, int delay) {
         if (callAdvanceBy) {
             instance.advanceTimeBy(delay);
         }
@@ -26,34 +26,34 @@ public class TimeSimulatorTest {
     public void testForErrors() {
         expectThrows(IllegalArgumentException.class,
             () -> {
-                TimeSimulator instance = new TimeSimulator();
+                VirtualEventLoop instance = new VirtualEventLoop();
                 instance.advanceTimeBy(-1);
             });
         expectThrows(IllegalArgumentException.class,
             () -> {
-                TimeSimulator instance = new TimeSimulator();
+                VirtualEventLoop instance = new VirtualEventLoop();
                 instance.advanceTimeTo(-1);
             });
         expectThrows(IllegalArgumentException.class,
             () -> {
-                TimeSimulator instance = new TimeSimulator();
+                VirtualEventLoop instance = new VirtualEventLoop();
                 instance.postCallback(null);
             });
         expectThrows(IllegalArgumentException.class,
             () -> {
-                TimeSimulator instance = new TimeSimulator();
+                VirtualEventLoop instance = new VirtualEventLoop();
                 instance.setTimeout(null, 0);
             });
         expectThrows(IllegalArgumentException.class,
             () -> {
-                TimeSimulator instance = new TimeSimulator();
+                VirtualEventLoop instance = new VirtualEventLoop();
                 instance.setTimeout(() -> {}, -1);
             });
     }
     
     @Test(dataProvider = "createTestAdvanceData")
     public void testAdvance(boolean callAdvanceBy) {
-        TimeSimulator instance = new TimeSimulator();
+        VirtualEventLoop instance = new VirtualEventLoop();
         assertEquals(instance.getCurrentTimestamp(), 0);
 
         List<String> callbackLogs = new ArrayList<String>();
@@ -210,7 +210,7 @@ public class TimeSimulatorTest {
 
     @Test
     public void testNestedCallbackPosts() {
-        TimeSimulator instance = new TimeSimulator();
+        VirtualEventLoop instance = new VirtualEventLoop();
 
         assertEquals(instance.getCurrentTimestamp(), 0);
 
@@ -262,7 +262,7 @@ public class TimeSimulatorTest {
 
     @Test
     public void testPerformanceForOverOneThousand() {
-        TimeSimulator instance = new TimeSimulator();
+        VirtualEventLoop instance = new VirtualEventLoop();
 
         int timeLimit = 10_000;
         for (int i = 0; i < timeLimit; i++) {

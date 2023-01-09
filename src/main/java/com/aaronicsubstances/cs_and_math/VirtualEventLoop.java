@@ -6,9 +6,9 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * A simulator of events which does not use real time.
+ * Implements a discrete-event simulator.
  */
-public class TimeSimulator {
+public class VirtualEventLoop {
     private final List<TaskDescriptor> taskQueue = new ArrayList<>();
     private int cancelledTaskCount = 0;
     private int idSeq = 0;
@@ -17,7 +17,7 @@ public class TimeSimulator {
     /**
      * Constructs a new instance with a current virtual timestamp of zero.
      */
-    public TimeSimulator() {
+    public VirtualEventLoop() {
     }
 
     /**

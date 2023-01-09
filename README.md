@@ -4,6 +4,7 @@ This Java library is a selected implementation of computer science and discrete 
 
 ## Includes
 
+  1. Implementation of discrete-event simulation
   1. Implementation of external sorting.
   1. Implementation of multi-way merge algorithm (a.k.a. k-way merge).
   1. Implementation of tournament loser tree for use with k-way algorithm.
