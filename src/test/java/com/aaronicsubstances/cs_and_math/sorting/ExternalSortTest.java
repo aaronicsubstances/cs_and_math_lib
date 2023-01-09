@@ -1,9 +1,7 @@
 package com.aaronicsubstances.cs_and_math.sorting;
 
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 

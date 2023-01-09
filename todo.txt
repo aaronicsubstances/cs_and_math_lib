@@ -1,0 +1,7 @@
+inner insertion sort loop
+merge sort (ie stable sort)
+binary search (array and generic list)
+fixed array size stack
+fixed array size queue
+doubly-linked list which supports stack and queue simultaneoulsy = double-ended queue
+skip list (i.e. dictionary based on sorted doubly-linked list)

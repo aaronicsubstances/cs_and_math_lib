@@ -12,7 +12,6 @@ import org.testng.annotations.Test;
 
 import static org.hamcrest.MatcherAssert.*;
 import static org.hamcrest.Matchers.*;
-import static org.testng.Assert.*;
 
 public class MultiWayMergeTest {
     private final Comparator<Item> forwardSortFunc;

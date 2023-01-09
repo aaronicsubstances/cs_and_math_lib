@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 
-import com.aaronicsubstances.cs_and_math.TestArg;
 import com.google.common.collect.Sets;
 
 import static com.aaronicsubstances.cs_and_math.TestResourceLoader.newMap;

@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.aaronicsubstances.cs_and_math.TestArg;
 import com.aaronicsubstances.cs_and_math.regex.KleeneClosureRegexNode;
 import com.aaronicsubstances.cs_and_math.regex.LiteralStringRegexNode;
 import com.aaronicsubstances.cs_and_math.regex.RegexNode;

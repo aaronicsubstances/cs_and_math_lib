@@ -3,8 +3,6 @@ package com.aaronicsubstances.cs_and_math.sorting;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
-import static org.hamcrest.MatcherAssert.*;
-import static org.hamcrest.Matchers.*;
 import static org.testng.Assert.*;
 
 public class SortConfigurationTest {

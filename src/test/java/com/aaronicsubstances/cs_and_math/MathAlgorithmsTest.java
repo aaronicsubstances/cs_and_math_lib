@@ -6,8 +6,6 @@ import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import com.aaronicsubstances.cs_and_math.TestResourceLoader;
-
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
