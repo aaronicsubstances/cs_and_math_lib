@@ -13,13 +13,14 @@ import static org.hamcrest.Matchers.*;
 import static org.testng.Assert.*;
 
 /*
- * test
+ * Test
 -expected behaviour
 --must meet a minimum number of calls when times of trigger are known.
 --must never interleave inside the user defined work function.
 ---setTimeout is used to make interleaving possible.
---triggers are launched with setTimeouts.
---is virtual event loop useful? yes if it can give exact number of calls.
+--test exceptions
+--use thread.sleep() and atomic variables to test interleaving and minimum calls
+  of both doWork and reportWorkTimeout
 */
 public class SetIntervalWorkerTest {
 
@@ -34,7 +35,7 @@ public class SetIntervalWorkerTest {
             }
         };
         instance.triggerWork();
-        
+
         assertThat(callbackLogs, is(Arrays.asList("3")));
     }
 
@@ -50,6 +51,39 @@ public class SetIntervalWorkerTest {
         };
         instance.triggerWork();
 
+        assertThat(callbackLogs, is(Arrays.asList("2", "2", "2")));
+    }
+
+    @Test
+    public void testAsyncWorkWithMultipleCallingBack() {
+        // arrange
+        VirtualEventLoop eventLoop = new VirtualEventLoop();
+        List<String> callbackLogs = new ArrayList<>();
+        SetIntervalWorker instance = new SetIntervalWorker() {
+            @Override
+            public void doWork(BiConsumer<Throwable, Boolean> cb) {
+                callbackLogs.add("2");
+                Runnable timeoutCb = () -> {
+                    cb.accept(null, callbackLogs.size() < 3);
+                };
+                eventLoop.setTimeout(timeoutCb, 2);
+                // repeat
+                eventLoop.setTimeout(timeoutCb, 2);
+                eventLoop.setTimeout(timeoutCb, 7);
+            }
+        };
+        List<String> actualErrors = new ArrayList<>();
+        eventLoop.setTimeout(() -> {
+            instance.triggerWork(err -> {
+                actualErrors.add(eventLoop.getCurrentTimestamp() + ":" + err);
+            });
+        }, 4);
+
+        // act
+        eventLoop.advanceTimeTo(100);
+
+        // assert
+        assertThat(actualErrors, is(Arrays.asList("10:null")));
         assertThat(callbackLogs, is(Arrays.asList("2", "2", "2")));
     }
 

@@ -1,6 +1,7 @@
 package com.aaronicsubstances.cs_and_math;
 
 import java.util.Date;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -54,7 +55,7 @@ public class SetIntervalWorker {
     }
 
     /**
-     *Synchronous version of doWork(cb)
+     * Synchronous version of doWork(cb)
      */
     public boolean doWork() throws Throwable {
         return false;
@@ -75,17 +76,38 @@ public class SetIntervalWorker {
     }
 
     public void triggerWork() throws Throwable {
-        triggerWorkInternal(null);
+        Object res = triggerUpdates();
+        if (res == null) {
+            return;
+        }
+        else if (res instanceof Long) {
+            try {
+                reportWorkTimeout((long)res);
+            }
+            catch (Throwable ignore) {}
+        }
+        else {
+            startWork((boolean[])res);
+        }
     }
 
     public void triggerWork(Consumer<Throwable> cb) {
-        try {
-            triggerWorkInternal(cb);
+        Objects.requireNonNull(cb, "callback is null");
+        Object res = triggerUpdates();
+        if (res == null) {
+            cb.accept(null);
         }
-        catch (Throwable err) {
-            throw new RuntimeException(err);
+        else if (res instanceof Long) {
+            try {
+                reportWorkTimeout((long)res);
+            }
+            catch (Throwable ignore) {}
+            cb.accept(null);
         }
-        //interleavingGuranteed(cb);
+        else {
+            startWorkLoop((boolean[])res, cb);
+            //interleavingGuranteed(cb);
+        }
     }
 
     /*private void interleavingGuranteed(Consumer<Throwable> cb) {        
@@ -99,120 +121,103 @@ public class SetIntervalWorker {
         });
     }*/
 
-    /*
-     * Separate from triggerWork(cb) to work around Java's checked exceptions.
-     */
-    private void triggerWorkInternal(Consumer<Throwable> cb) throws Throwable {
-        boolean[] cancellationHandle = null;
-        long pendingWorkTimestamp = 0;
-        synchronized (this) {
-            externalProceed = true;
-            if (isCurrentlyExecuting) {
-                if (workTimeoutSecs > 0 && lastWorkTimestamp > 0) {
-                    long currentTimestamp = fetchCurrentTimestamp();
-                    if ((currentTimestamp - lastWorkTimestamp) >= workTimeoutSecs * 1000) {
-                        pendingWorkTimestamp = lastWorkTimestamp;
-                        
-                        // ensure timeout check is not repeated too often during work timeout.
-                        lastWorkTimestamp = 0;
-                        
-                        if (cancelCurrentExecutionOnWorkTimeout) {
-                            if (latestCancellationHandle != null) {
-                                latestCancellationHandle[0] = true;
-                            }
-                            
-                            // ensure interval work can be resumed in the future.
-                            isCurrentlyExecuting = false;
-                        }
-                    }
-                }
-            }
-            else {
-                isCurrentlyExecuting = true;
-                cancellationHandle = new boolean[1];
-                latestCancellationHandle = cancellationHandle;
-            }
-        }
-        if (pendingWorkTimestamp > 0) {
-            try {
-                reportWorkTimeout(pendingWorkTimestamp);
-            }
-            catch (Throwable ignore) {}
-        }
-
-        // return via one of the following
-        if (cancellationHandle != null) {
-            if (cb != null) {
-                startWorkLoop(cancellationHandle, cb);
-            }
-            else {
-                startWork(cancellationHandle);
-            }
-        }
-        else {
-            // remember to return normally for callback case
-            if (cb != null) {
-                cb.accept(null);
-            }
-        }
-    }
-
     private void startWorkLoop(boolean[] cancellationHandle, Consumer<Throwable> cb) {
-        synchronized (this) {
-            externalProceed = false; // also prevents endless looping if there is no error.
-            lastWorkTimestamp = fetchCurrentTimestamp();
-        }
-        doWork((err, internalProceed) -> {
-            boolean continueLoop = true;
-            synchronized (this) {
-                if (cancellationHandle[0]) {
-                    continueLoop = false;
+        loopPreUpdates();
+        boolean[] multiCallbackProtection = new boolean[1];
+        try {
+            doWork((err, internalProceed) -> {
+                if (multiCallbackProtection[0]) {
+                    return;
+                }
+                multiCallbackProtection[0] = true;
+                boolean continueLoop = loopPostUpdates(err != null, internalProceed,
+                    cancellationHandle);
+                if (continueLoop) {
+                    startWorkLoop(cancellationHandle, cb);
                 }
                 else {
-                    lastWorkTimestamp = 0;
-                    if (err != null || (!externalProceed && !internalProceed)) {
-                        isCurrentlyExecuting = false;
-                        continueLoop = false;
-                    }
+                    cb.accept(err);
                 }
-            }
-            if (continueLoop) {
-                startWorkLoop(cancellationHandle, cb);
-            }
-            else {
-                cb.accept(err);
-            }
-        });
+            });
+        }
+        catch (Throwable err) {
+            loopPostUpdates(true, false, cancellationHandle);
+            cb.accept(err);
+        }
     }
 
     private void startWork(boolean[] cancellationHandle) throws Throwable {
         boolean continueLoop = true;
         while (continueLoop) {
-            synchronized (this) {
-                externalProceed = false; // also prevents endless looping if there is no error.
-                lastWorkTimestamp = fetchCurrentTimestamp();
-            }
+            loopPreUpdates();
             boolean internalProceed = false, errOccured = false;
             try {
                 internalProceed = doWork();
             }
-            catch (Throwable t) {
+            catch (Throwable err) {
                 errOccured = true;
-                throw t;
+                throw err;
             }
             finally {
-                synchronized (this) {
-                    if (cancellationHandle[0]) {
-                        continueLoop = false;
-                    }
-                    else {
-                        lastWorkTimestamp = 0;
-                        if (errOccured || (!externalProceed && !internalProceed)) {
-                            isCurrentlyExecuting = false;
-                            continueLoop = false;
+                continueLoop = loopPostUpdates(errOccured, internalProceed,
+                    cancellationHandle);
+            }
+        }
+    }
+
+    private synchronized Object triggerUpdates() {
+        externalProceed = true;
+        if (isCurrentlyExecuting) {
+            if (workTimeoutSecs > 0 && lastWorkTimestamp > 0) {
+                long currentTimestamp = fetchCurrentTimestamp();
+                if ((currentTimestamp - lastWorkTimestamp) >= workTimeoutSecs * 1000) {
+                    long pendingWorkTimestamp = lastWorkTimestamp;
+                    
+                    // ensure timeout check is not repeated too often during work timeout.
+                    lastWorkTimestamp = 0;
+                    
+                    if (cancelCurrentExecutionOnWorkTimeout) {
+                        if (latestCancellationHandle != null) {
+                            latestCancellationHandle[0] = true;
                         }
+
+                        // ensure interval work can be resumed in the future.
+                        isCurrentlyExecuting = false;
                     }
+                    
+                    return pendingWorkTimestamp;
                 }
+            }
+        }
+        else {
+            isCurrentlyExecuting = true;
+            boolean[] cancellationHandle = new boolean[1];
+            latestCancellationHandle = cancellationHandle;
+            return cancellationHandle;
+        }
+        return null;
+    }
+
+    private synchronized void loopPreUpdates() {
+        externalProceed = false; // also prevents endless looping if there is no error.
+        lastWorkTimestamp = fetchCurrentTimestamp();
+    }
+
+    private synchronized boolean loopPostUpdates(
+            boolean errOccured, boolean internalProceed,
+            boolean[] cancellationHandle) {
+        if (cancellationHandle[0]) {
+            return false;
+        }
+        else {
+            lastWorkTimestamp = 0;
+            if (errOccured || (!externalProceed && !internalProceed)) {
+                cancellationHandle[0] = true;
+                isCurrentlyExecuting = false;
+                return false;
+            }
+            else {
+                return true;
             }
         }
     }
