@@ -3,6 +3,8 @@ package com.aaronicsubstances.cs_and_math;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
 import org.testng.annotations.DataProvider;
@@ -12,19 +14,10 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.testng.Assert.*;
 
-/*
- * Test
--expected behaviour
---must meet a minimum number of calls when times of trigger are known.
---must never interleave inside the user defined work function.
----setTimeout is used to make interleaving possible.
---use thread.sleep() and atomic variables to test interleaving and minimum calls
-  of both doWork and reportWorkTimeout
-*/
 public class SetIntervalWorkerTest {
 
     @Test
-    public void testOneOffSyncWork() throws Throwable {
+    public void testSyncWorkOneOff() throws Throwable {
         // arrange
         int[] callCount = new int[1];
         SetIntervalWorker instance = new SetIntervalWorker() {
@@ -62,14 +55,108 @@ public class SetIntervalWorkerTest {
     }
 
     @Test
+    public void testSyncWorkAndExternalPending() throws Throwable {
+        // arrange
+        int[] callCount = new int[1];
+        SetIntervalWorker instance = new SetIntervalWorker() {
+            @Override
+            public boolean doWork() throws Throwable {
+                callCount[0]++;
+                if (callCount[0] < 10) {
+                    triggerWork();  // to set externalPending to true.
+                }
+                return false;
+            }
+        };
+        
+        // act
+        instance.triggerWork();
+
+        // assert
+        assertEquals(callCount[0], 10);
+    }
+
+    @Test
+    public void testSyncWorkTimeoutWithCancelling() throws Throwable {
+        // arrange
+        AtomicInteger callCount = new AtomicInteger();
+        AtomicInteger virtualTimeSeed = new AtomicInteger(10);
+        AtomicBoolean signaller = new AtomicBoolean();
+        AtomicInteger reportCount = new AtomicInteger();
+        SetIntervalWorker instance = new SetIntervalWorker() {
+            @Override
+            public boolean doWork() throws Throwable {
+                if (callCount.incrementAndGet() == 1) {
+                    synchronized (this) {
+                        while (!signaller.get()) {
+                            wait();
+                        }
+                    }
+                    return true; // without proper cancellation 
+                                 // this can result in endless looping
+                }
+                return false;
+            }
+            @Override
+            public long fetchCurrentTimestamp() {
+                // increment ensures timeout will be triggered.
+                return virtualTimeSeed.getAndAdd(5000);
+            }
+            @Override
+            public void reportWorkTimeout(long t) {
+                reportCount.incrementAndGet();
+            }
+        };
+        instance.setWorkTimeoutSecs(3);
+
+        // act by spawning a thread to race with
+        // current thread, such that the first to call
+        // triggerWork will block, and the second should
+        // unblock it.
+        Thread th = new Thread() {
+            @Override
+            public void run() {
+                try {
+                    instance.triggerWork();
+                    signaller.set(true);
+                    synchronized (instance) {
+                        instance.notify();
+                    }
+                }
+                catch (Throwable err) {
+                    throw new RuntimeException(err);
+                }
+            }
+        };
+        th.start();
+        instance.triggerWork();
+        signaller.set(true);
+        synchronized (instance) {
+            instance.notify();
+        }
+        
+        // should not be blocked.
+        th.join();
+        instance.triggerWork();
+        
+        // assert
+        assertEquals(callCount.get(), 2);
+        assertEquals(reportCount.get(), 1);
+    }
+
+    @Test
     public void testSyncWorkAndErrorHandling() throws Throwable {
         // arrange
         int[] callCount = new int[1];
         SetIntervalWorker instance = new SetIntervalWorker() {
             @Override
-            public boolean doWork() {
+            public boolean doWork() throws Throwable {
                 callCount[0]++;
-                if (callCount[0] > 5) {
+                if (callCount[0] == 1) {
+                    triggerWork(); // to set externalPending to true.
+                    throw new RuntimeException("direct");
+                }
+                if (callCount[0] == 1 || callCount[0] > 5) {
                     throw new RuntimeException("direct");
                 }
                 return callCount[0] < 3;
@@ -78,6 +165,16 @@ public class SetIntervalWorkerTest {
         String exception = null;
 
         // act/assert
+        exception = null;
+        try {
+            instance.triggerWork();
+        }
+        catch (Throwable err) {
+            exception = err.getMessage();
+        }
+        assertEquals(callCount[0], 1);
+        assertEquals(exception, "direct");
+
         exception = null;
         try {
             instance.triggerWork();

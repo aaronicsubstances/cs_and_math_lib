@@ -50,14 +50,14 @@ public class SetIntervalWorker {
      * second indicates whether interval work should be triggered again and immediately
      * without interval delay.
      */
-    public void doWork(BiConsumer<Throwable, Boolean> cb) {
+    protected void doWork(BiConsumer<Throwable, Boolean> cb) {
         cb.accept(null, Boolean.FALSE);
     }
 
     /**
      * Synchronous version of doWork(cb)
      */
-    public boolean doWork() throws Throwable {
+    protected boolean doWork() throws Throwable {
         return false;
     }
 
@@ -66,60 +66,32 @@ public class SetIntervalWorker {
      *
      * @params timestamp indicates the time at which work was started.
      */
-    public void reportWorkTimeout(long timestamp) {}
+    protected void reportWorkTimeout(long timestamp) {}
 
     /**
      * Exposed for overriding with virtual timestamps during test.
      */
-    public long fetchCurrentTimestamp() {
+    long fetchCurrentTimestamp() {
         return new Date().getTime();
     }
 
     public void triggerWork() throws Throwable {
-        Object res = triggerUpdates();
-        if (res == null) {
-            return;
-        }
-        else if (res instanceof Long) {
-            try {
-                reportWorkTimeout((long)res);
-            }
-            catch (Throwable ignore) {}
-        }
-        else {
-            startWork((boolean[])res);
+        boolean[] cancellationHandle = triggerUpdates();
+        if (cancellationHandle != null) {
+            startWork(cancellationHandle);
         }
     }
 
     public void triggerWork(Consumer<Throwable> cb) {
         Objects.requireNonNull(cb, "callback is null");
-        Object res = triggerUpdates();
-        if (res == null) {
-            cb.accept(null);
-        }
-        else if (res instanceof Long) {
-            try {
-                reportWorkTimeout((long)res);
-            }
-            catch (Throwable ignore) {}
-            cb.accept(null);
+        boolean[] cancellationHandle = triggerUpdates();
+        if (cancellationHandle != null) {
+            startWorkLoop(cancellationHandle, cb);
         }
         else {
-            startWorkLoop((boolean[])res, cb);
-            //interleavingGuranteed(cb);
+            cb.accept(null);
         }
     }
-
-    /*private void interleavingGuranteed(Consumer<Throwable> cb) {        
-        doWork((err, internalProceed) -> {
-            if (err == null && internalProceed) {
-                interleavingGuranteed(cb);
-            }
-            else {
-                cb.accept(err);
-            }
-        });
-    }*/
 
     private void startWorkLoop(boolean[] cancellationHandle, Consumer<Throwable> cb) {
         loopPreUpdates();
@@ -165,37 +137,44 @@ public class SetIntervalWorker {
         }
     }
 
-    private synchronized Object triggerUpdates() {
-        externalProceed = true;
-        if (isCurrentlyExecuting) {
-            if (workTimeoutSecs > 0 && lastWorkTimestamp > 0) {
-                long currentTimestamp = fetchCurrentTimestamp();
-                if ((currentTimestamp - lastWorkTimestamp) >= workTimeoutSecs * 1000) {
-                    long pendingWorkTimestamp = lastWorkTimestamp;
-                    
-                    // ensure timeout check is not repeated too often during work timeout.
-                    lastWorkTimestamp = 0;
-                    
-                    if (cancelCurrentExecutionOnWorkTimeout) {
-                        if (latestCancellationHandle != null) {
-                            latestCancellationHandle[0] = true;
-                        }
+    private boolean[] triggerUpdates() {
+        boolean[] cancellationHandle = null;
+        long pendingWorkTimestamp = 0;
+        synchronized (this) {
+            externalProceed = true;
+            if (isCurrentlyExecuting) {
+                if (workTimeoutSecs > 0 && lastWorkTimestamp > 0) {
+                    long currentTimestamp = fetchCurrentTimestamp();
+                    if ((currentTimestamp - lastWorkTimestamp) >= workTimeoutSecs * 1000) {
+                        pendingWorkTimestamp = lastWorkTimestamp;
+                        
+                        // ensure timeout check is not repeated too often during work timeout.
+                        lastWorkTimestamp = 0;
+                        
+                        if (cancelCurrentExecutionOnWorkTimeout) {
+                            if (latestCancellationHandle != null) {
+                                latestCancellationHandle[0] = true;
+                            }
 
-                        // ensure interval work can be resumed in the future.
-                        isCurrentlyExecuting = false;
+                            // ensure interval work can be resumed in the future.
+                            isCurrentlyExecuting = false;
+                        }
                     }
-                    
-                    return pendingWorkTimestamp;
                 }
             }
+            else {
+                isCurrentlyExecuting = true;
+                cancellationHandle = new boolean[1];
+                latestCancellationHandle = cancellationHandle;
+            }
         }
-        else {
-            isCurrentlyExecuting = true;
-            boolean[] cancellationHandle = new boolean[1];
-            latestCancellationHandle = cancellationHandle;
-            return cancellationHandle;
+        if (pendingWorkTimestamp > 0) {
+            try {
+                reportWorkTimeout(pendingWorkTimestamp);
+            }
+            catch (Throwable ignore) {}
         }
-        return null;
+        return cancellationHandle;
     }
 
     private synchronized void loopPreUpdates() {
