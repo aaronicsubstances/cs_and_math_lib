@@ -18,7 +18,6 @@ import static org.testng.Assert.*;
 --must meet a minimum number of calls when times of trigger are known.
 --must never interleave inside the user defined work function.
 ---setTimeout is used to make interleaving possible.
---test exceptions
 --use thread.sleep() and atomic variables to test interleaving and minimum calls
   of both doWork and reportWorkTimeout
 */
@@ -26,32 +25,112 @@ public class SetIntervalWorkerTest {
 
     @Test
     public void testOneOffSyncWork() throws Throwable {
-        List<String> callbackLogs = new ArrayList<>();
+        // arrange
+        int[] callCount = new int[1];
         SetIntervalWorker instance = new SetIntervalWorker() {
             @Override
             public boolean doWork() {
-                callbackLogs.add("3");
+                callCount[0]++;
                 return false;
             }
         };
+        
+        // act
         instance.triggerWork();
 
-        assertThat(callbackLogs, is(Arrays.asList("3")));
+        // assert
+        assertEquals(callCount[0], 1);
     }
 
     @Test
     public void testSyncWorkAndInternalPending() throws Throwable {
-        List<String> callbackLogs = new ArrayList<>();
+        // arrange
+        int[] callCount = new int[1];
         SetIntervalWorker instance = new SetIntervalWorker() {
             @Override
             public boolean doWork() {
-                callbackLogs.add("2");
-                return callbackLogs.size() < 3;
+                callCount[0]++;
+                return callCount[0] < 3;
             }
         };
+        
+        // act
         instance.triggerWork();
 
-        assertThat(callbackLogs, is(Arrays.asList("2", "2", "2")));
+        // assert
+        assertEquals(callCount[0], 3);
+    }
+
+    @Test
+    public void testSyncWorkAndErrorHandling() throws Throwable {
+        // arrange
+        int[] callCount = new int[1];
+        SetIntervalWorker instance = new SetIntervalWorker() {
+            @Override
+            public boolean doWork() {
+                callCount[0]++;
+                if (callCount[0] > 5) {
+                    throw new RuntimeException("direct");
+                }
+                return callCount[0] < 3;
+            }
+        };
+        String exception = null;
+
+        // act/assert
+        exception = null;
+        try {
+            instance.triggerWork();
+        }
+        catch (Throwable err) {
+            exception = err.getMessage();
+        }
+        assertEquals(callCount[0], 3);
+        assertEquals(exception, null);
+
+        // act/assert
+        exception = null;
+        try {
+            instance.triggerWork();
+        }
+        catch (Throwable err) {
+            exception = err.getMessage();
+        }
+        assertEquals(callCount[0], 4);
+        assertEquals(exception, null);
+
+        // act/assert
+        exception = null;
+        try {
+            instance.triggerWork();
+        }
+        catch (Throwable err) {
+            exception = err.getMessage();
+        }
+        assertEquals(callCount[0], 5);
+        assertEquals(exception, null);
+
+        // act/assert
+        exception = null;
+        try {
+            instance.triggerWork();
+        }
+        catch (Throwable err) {
+            exception = err.getMessage();
+        }
+        assertEquals(callCount[0], 6);
+        assertEquals(exception, "direct");
+
+        // act/assert
+        exception = null;
+        try {
+            instance.triggerWork();
+        }
+        catch (Throwable err) {
+            exception = err.getMessage();
+        }
+        assertEquals(callCount[0], 7);
+        assertEquals(exception, "direct");
     }
 
     @Test
@@ -62,7 +141,7 @@ public class SetIntervalWorkerTest {
         SetIntervalWorker instance = new SetIntervalWorker() {
             @Override
             public void doWork(BiConsumer<Throwable, Boolean> cb) {
-                callbackLogs.add("2");
+                callbackLogs.add("" + eventLoop.getCurrentTimestamp());
                 Runnable timeoutCb = () -> {
                     cb.accept(null, callbackLogs.size() < 3);
                 };
@@ -83,12 +162,12 @@ public class SetIntervalWorkerTest {
         eventLoop.advanceTimeTo(100);
 
         // assert
+        assertThat(callbackLogs, is(Arrays.asList("4", "6", "8")));
         assertThat(actualErrors, is(Arrays.asList("10:null")));
-        assertThat(callbackLogs, is(Arrays.asList("2", "2", "2")));
     }
 
     @Test
-    public void testAsyncWorkAndBothInternalAndExternalPending() throws Throwable {
+    public void testAsyncWorkAndBothInternalAndExternalPending() {
         // arrange
         VirtualEventLoop eventLoop = new VirtualEventLoop();
         List<String> callbackLogs = new ArrayList<>();
@@ -123,12 +202,12 @@ public class SetIntervalWorkerTest {
         eventLoop.advanceTimeTo(100);
         
         // assert
-        assertThat(actualErrors, is(expectedErrors));
         assertThat(callbackLogs, is(expectedLogs));
+        assertThat(actualErrors, is(expectedErrors));
     }
 
     @Test
-    public void testAsyncWorkTimeoutWithoutCancelling() throws Throwable {
+    public void testAsyncWorkTimeoutWithoutCancelling() {
         // arrange
         VirtualEventLoop eventLoop = new VirtualEventLoop();
         List<String> callbackLogs = new ArrayList<>();
@@ -175,12 +254,12 @@ public class SetIntervalWorkerTest {
         eventLoop.advanceTimeTo(10_000);
         
         // assert
-        assertThat(actualErrors, is(expectedErrors));
         assertThat(callbackLogs, is(expectedLogs));
+        assertThat(actualErrors, is(expectedErrors));
     }
 
     @Test
-    public void testAsyncWorkTimeoutWithCancelling() throws Throwable {
+    public void testAsyncWorkTimeoutWithCancelling() {
         // arrange
         VirtualEventLoop eventLoop = new VirtualEventLoop();
         List<String> callbackLogs = new ArrayList<>();
@@ -225,7 +304,57 @@ public class SetIntervalWorkerTest {
         eventLoop.advanceTimeTo(10_000);
         
         // assert
-        assertThat(actualErrors, is(expectedErrors));
         assertThat(callbackLogs, is(expectedLogs));
+        assertThat(actualErrors, is(expectedErrors));
+    }
+
+    @Test
+    public void testAsyncWorkAndErrorHandling() {
+        // arrange
+        VirtualEventLoop eventLoop = new VirtualEventLoop();
+        List<String> callbackLogs = new ArrayList<>();
+        List<String> expectedLogs = Arrays.asList(
+            "10", "14", "18", "23", "30", "45" );
+        SetIntervalWorker instance = new SetIntervalWorker() {
+            @Override
+            public void doWork(BiConsumer<Throwable, Boolean> cb) {
+                if (callbackLogs.size() > 5) {
+                    throw new RuntimeException("direct");
+                }
+                callbackLogs.add(eventLoop.getCurrentTimestamp() + "");
+                eventLoop.setTimeout(() -> {
+                    if (callbackLogs.size() > 5) {
+                        cb.accept(new RuntimeException("indirect"), true);
+                    }
+                    else {
+                        cb.accept(null, eventLoop.getCurrentTimestamp() < 20);
+                    }
+                }, 4);
+            }
+            @Override
+            public long fetchCurrentTimestamp() {
+                return eventLoop.getCurrentTimestamp();
+            }
+        };
+        int[] times = new int[]{ 10, 12, 17, 23, 30, 45, 60 };
+        List<String> actualErrors = new ArrayList<>();
+        List<String> expectedErrors = Arrays.asList(
+            "12:null", "17:null", "22:null", "27:null", "34:null",
+            "49:indirect", "60:direct");
+        for (int time : times) {
+            eventLoop.setTimeout(() -> {
+                instance.triggerWork(err -> {
+                    actualErrors.add(eventLoop.getCurrentTimestamp() + ":" +
+                        (err != null ? err.getMessage() : "null"));
+                });
+            }, time);
+        }
+
+        // act
+        eventLoop.advanceTimeTo(100);
+
+        // assert
+        assertThat(callbackLogs, is(expectedLogs));
+        assertThat(actualErrors, is(expectedErrors));
     }
 }
