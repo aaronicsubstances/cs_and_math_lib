@@ -9,7 +9,6 @@ This Java library is a selected implementation of computer science and discrete 
   1. Implementation of multi-way merge algorithm (a.k.a. k-way merge).
   1. Implementation of tournament loser tree for use with k-way algorithm.
   1. Implementation of Unix diff normal format
-  1. Generic solution for repetitive timer tasks (such as NodeJS setInterval) to avoid interleaving of task executions.
   1. Generating Permutations and Combinations
   1. Generating Cartesian Products
   1. Dijsktra Shortest-Path Graph Algorithm
