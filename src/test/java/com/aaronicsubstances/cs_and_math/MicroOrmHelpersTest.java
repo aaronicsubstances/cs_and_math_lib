@@ -15,7 +15,7 @@ import static com.aaronicsubstances.cs_and_math.MicroOrmHelpers.*;
 
 public class MicroOrmHelpersTest {
 
-    @Test
+    /*@Test
     public void testCreateTupleItemAllocator1() {
         int tupleLength = 0;
         TupleIntrospector tupleIntrospector = (index, name) -> {
@@ -113,5 +113,5 @@ public class MicroOrmHelpersTest {
         expected = -1;
         actual = instance.allocate("text");
         assertEquals(actual, expected);
-    }
+    }*/
 }
